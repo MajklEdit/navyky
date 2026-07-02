@@ -1,0 +1,53 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kódu
+        uses: actions/checkout@v4
+
+      - name: Nastavit Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Nainstalovat závislosti
+        run: npm install
+
+      - name: Přidat Android platformu
+        run: npx cap add android
+
+      - name: Zabuildit web (Vite)
+        run: npm run build
+
+      - name: Synchronizovat do Androidu
+        run: npx cap sync android
+
+      - name: Nastavit Java (pro Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Nastavit Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Povolit spouštění gradlew
+        run: chmod +x android/gradlew
+
+      - name: Sestavit APK (debug)
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Nahrát APK jako výstup
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
