@@ -38,14 +38,16 @@ export async function requestPermissions() {
   }
 }
 
-// cancels any notifications previously scheduled for this habit id
+// cancels any notifications previously scheduled for this habit id — clears every
+// possible id shape (weekly slots + the one-time slot) so switching between
+// "opakovaný návyk" and "jednorázově" never leaves a stale notification behind
 export async function cancelHabitNotifications(habit) {
-  const days = habit.days && habit.days.length > 0 ? habit.days : [null];
-  const ids = days.map((d) => hashId(`${habit.id}-${d}`));
+  const keys = [null, 0, 1, 2, 3, 4, 5, 6, "once"];
+  const ids = keys.map((d) => hashId(`${habit.id}-${d}`));
   await LocalNotifications.cancel({ notifications: ids.map((id) => ({ id })) });
 }
 
-// schedules a repeating notification for a single "check" type habit
+// schedules a notification for a single "check" type habit
 // (water/sleep are all-day goals, not a single fixed time, so they're skipped here)
 export async function scheduleHabitNotifications(habit) {
   await cancelHabitNotifications(habit);
@@ -53,8 +55,24 @@ export async function scheduleHabitNotifications(habit) {
   if (!habit.time || !/^\d{2}:\d{2}$/.test(habit.time)) return;
 
   const [hour, minute] = habit.time.split(":").map(Number);
-  const days = habit.days && habit.days.length > 0 ? habit.days : [null];
 
+  if (habit.once) {
+    if (!habit.date) return;
+    const [year, month, day] = habit.date.split("-").map(Number);
+    const at = new Date(year, month - 1, day, hour, minute, 0, 0);
+    if (at <= new Date()) return; // one-time date/time already passed — nothing to schedule
+    await LocalNotifications.schedule({
+      notifications: [{
+        id: hashId(`${habit.id}-once`),
+        title: "Ohýnek",
+        body: `Čas na: ${habit.name}`,
+        schedule: { at, allowWhileIdle: true },
+      }],
+    });
+    return;
+  }
+
+  const days = habit.days && habit.days.length > 0 ? habit.days : [null];
   const notifications = days.map((d) => {
     const weekday = d === null ? null : toCapacitorWeekday(d);
     return {

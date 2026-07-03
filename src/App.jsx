@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
-  Pill, Dumbbell, Droplets, Moon, Flame as FlameIcon, Check, ChevronLeft, ChevronRight,
-  Plus, X, CalendarDays, BarChart3, Home, Trash2, Pencil, Minus, Share2, Sparkles, Bell,
+  Flame as FlameIcon, Check, ChevronLeft, ChevronRight,
+  Plus, X, CalendarDays, BarChart3, Home, Trash2, Pencil, Minus, Share2, Sparkles, User,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import storage from "./storage";
@@ -35,12 +35,16 @@ function mixHex(h1, h2, t) {
   return `rgb(${r},${g},${bl})`;
 }
 
+// ============================================================================
+// CATEGORY ICONS — native emoji, same reasoning as the flame: professionally
+// drawn artwork beats another hand-rolled SVG attempt.
+// ============================================================================
 const CATS = {
-  supplement: { color: COLORS.primary, icon: Pill, label: "Suplement" },
-  training: { color: COLORS.secondary, icon: Dumbbell, label: "Trénink" },
-  water: { color: COLORS.water, icon: Droplets, label: "Pitný režim" },
-  sleep: { color: COLORS.sleepC, icon: Moon, label: "Spánek" },
-  custom: { color: COLORS.custom, icon: Bell, label: "Aktivita" },
+  supplement: { color: COLORS.primary, icon: "💊", label: "Suplement" },
+  training: { color: COLORS.secondary, icon: "🏋️", label: "Trénink" },
+  water: { color: COLORS.water, icon: "💧", label: "Pitný režim" },
+  sleep: { color: COLORS.sleepC, icon: "🌙", label: "Spánek" },
+  custom: { color: COLORS.custom, icon: "🔔", label: "Aktivita" },
 };
 
 const DOW = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"];
@@ -66,9 +70,14 @@ const DEFAULT_HABITS = [];
 // HELPERS
 // ============================================================================
 function fmt(d) { const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0"); return `${y}-${m}-${day}`; }
+function parseDate(s) { const [y, m, day] = s.split("-").map(Number); return new Date(y, m - 1, day); }
 function todayDate() { return new Date(); }
 function dowIndex(d) { return (d.getDay() + 6) % 7; }
-function isScheduled(habit, date) { if (!habit.days || habit.days.length === 0) return true; return habit.days.includes(dowIndex(date)); }
+function isScheduled(habit, date) {
+  if (habit.once) return habit.date === fmt(date);
+  if (!habit.days || habit.days.length === 0) return true;
+  return habit.days.includes(dowIndex(date));
+}
 function isDone(habit, raw) {
   if (habit.type === "check") return !!raw;
   return (raw || 0) >= habit.target;
@@ -78,6 +87,7 @@ function progressFrac(habit, raw) {
   return Math.max(0, Math.min(1, (raw || 0) / habit.target));
 }
 function scheduleLabel(habit) {
+  if (habit.once) return habit.date ? `jednorázově · ${parseDate(habit.date).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" })}` : "jednorázově";
   if (!habit.days || habit.days.length === 0 || habit.days.length === 7) return "každý den";
   return habit.days.map(i => DOW[i]).join(" · ");
 }
@@ -122,66 +132,31 @@ function getPerfectStreak(habits, entries, today) {
 
 // ============================================================================
 // THE FIRE — signature element
+// Uses the platform's native fire emoji instead of a hand-drawn shape: it's
+// professionally designed artwork that's guaranteed to render well on every
+// device, so no custom path/gradient bugs to chase. Progress is expressed via
+// size + a grayscale-to-full-color filter; the glow tints to the app accent.
 // ============================================================================
 function Flame({ score, size = 168 }) {
   const t = score == null ? 0 : score; // 0..1
-  const scale = 0.62 + t * 0.5;
-  const bodyColor1 = mixHex(COLORS.border, COLORS.primary, t);
-  const bodyColor2 = mixHex(COLORS.surface2, COLORS.sleepC, Math.min(1, t * 1.1));
-  const tipColor = mixHex(COLORS.surface2, COLORS.secondary, t);
+  const scale = 0.12 + t * 0.88; // at 0% it's a tiny spark, growing to full size at 100%
+  const opacity = 0.45 + t * 0.55;
+  const grayscale = 1 - t;
+  const brightness = 0.6 + t * 0.5;
+  const saturate = 0.5 + t * 0.9;
   const glow = hexA(COLORS.primary, 0.15 + t * 0.55);
-  const mood = t >= 0.75 ? "happy" : t >= 0.34 ? "neutral" : "sleepy";
-  const gradId = "flameGrad";
 
   return (
     <div style={{ position: "relative", width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div className="fire-flicker" style={{
-        width: size, height: size, display: "flex", alignItems: "flex-end", justifyContent: "center",
-        filter: `drop-shadow(0 0 ${18 + t * 26}px ${glow})`, transform: `scale(${scale})`, transition: "transform .6s ease, filter .6s ease",
-      }}>
-        <svg viewBox="0 0 100 130" width={size * 0.72} height={size * 0.9}>
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0%" stopColor={bodyColor1} />
-              <stop offset="55%" stopColor={bodyColor2} />
-              <stop offset="100%" stopColor={tipColor} />
-            </linearGradient>
-          </defs>
-          <path
-            d="M50 2 C24 34 12 62 24 88 C14 80 8 96 18 116 C30 134 70 134 82 116 C92 96 86 80 76 88 C88 62 76 34 50 2 Z"
-            fill={`url(#${gradId})`}
-          />
-          {t > 0.1 && (
-            <g>
-              {mood === "sleepy" && (
-                <>
-                  <rect x="38" y="78" width="9" height="2.5" rx="1.2" fill={COLORS.bg} />
-                  <rect x="55" y="78" width="9" height="2.5" rx="1.2" fill={COLORS.bg} />
-                  <path d="M40 92 Q50 87 60 92" stroke={COLORS.bg} strokeWidth="2.5" fill="none" strokeLinecap="round" />
-                </>
-              )}
-              {mood === "neutral" && (
-                <>
-                  <circle cx="42" cy="80" r="3.4" fill={COLORS.bg} />
-                  <circle cx="60" cy="80" r="3.4" fill={COLORS.bg} />
-                  <path d="M41 92 Q50 96 59 92" stroke={COLORS.bg} strokeWidth="2.5" fill="none" strokeLinecap="round" />
-                </>
-              )}
-              {mood === "happy" && (
-                <>
-                  <circle cx="42" cy="79" r="3.8" fill={COLORS.bg} />
-                  <circle cx="60" cy="79" r="3.8" fill={COLORS.bg} />
-                  <path d="M39 91 Q50 101 63 91" stroke={COLORS.bg} strokeWidth="3" fill="none" strokeLinecap="round" />
-                </>
-              )}
-            </g>
-          )}
-        </svg>
-      </div>
+        fontSize: size * 0.72, lineHeight: 1, transform: `scale(${scale})`, opacity,
+        filter: `grayscale(${grayscale}) brightness(${brightness}) saturate(${saturate}) drop-shadow(0 0 ${14 + t * 30}px ${glow})`,
+        transition: "transform .6s ease, filter .6s ease, opacity .6s ease",
+      }}>🔥</div>
       {t >= 0.98 && (
         <>
-          <Sparkles size={16} color={COLORS.sleepC} style={{ position: "absolute", top: 6, right: 14 }} className="sparkle-a" />
-          <Sparkles size={12} color={COLORS.secondary} style={{ position: "absolute", top: 24, left: 8 }} className="sparkle-b" />
+          <Sparkles size={16} color="#FFF3C4" style={{ position: "absolute", top: 6, right: 14 }} className="sparkle-a" />
+          <Sparkles size={12} color="#FFFFFF" style={{ position: "absolute", top: 24, left: 8 }} className="sparkle-b" />
         </>
       )}
     </div>
@@ -192,14 +167,14 @@ function Flame({ score, size = 168 }) {
 // SMALL UI ATOMS
 // ============================================================================
 function IconBadge({ cat, done }) {
-  const C = CATS[cat]; const Icon = C.icon;
+  const C = CATS[cat];
   return (
     <div style={{
       width: 40, height: 40, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
       background: done ? C.color : COLORS.surface2, border: `1px solid ${done ? C.color : COLORS.border}`,
       boxShadow: done ? `0 0 12px ${hexA(C.color, 0.5)}` : "none", transition: "all .2s ease",
     }}>
-      <Icon size={18} color={done ? COLORS.bg : C.color} strokeWidth={2.2} />
+      <span style={{ fontSize: 18, lineHeight: 1, filter: done ? "none" : "grayscale(0.35) opacity(0.9)" }}>{C.icon}</span>
     </div>
   );
 }
@@ -274,13 +249,14 @@ function TimePicker({ value, onChange }) {
 // ============================================================================
 // SCREENS
 // ============================================================================
-function TodayScreen({ habits, entries, onCheck, onAdjust, todayKey, onEdit }) {
+function TodayScreen({ habits, entries, onCheck, onAdjust, todayKey, onEdit, settings }) {
   const scheduled = habits.filter(h => isScheduled(h, todayDate()));
   const score = dayScore(habits, entries, todayDate()) ?? 0;
   const perfectStreak = getPerfectStreak(habits, entries, todayDate());
   const level = getLevel(perfectStreak);
   const pct = Math.round(score * 100);
   const doneCount = scheduled.filter(h => isDone(h, entries[todayKey]?.[h.id])).length;
+  const headline = settings?.name?.trim() || level.name;
 
   const heroMsg = scheduled.length === 0 ? "Dnes nic naplánováno." : pct === 100 ? "Vše splněno. Oheň hoří naplno." : pct === 0 ? "Ještě jsi nezačal. Zapal ho." : "Oheň roste s každým splněným úkolem.";
 
@@ -292,7 +268,7 @@ function TodayScreen({ habits, entries, onCheck, onAdjust, todayKey, onEdit }) {
 
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 0 18px" }}>
         <Flame score={score} />
-        <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 15, fontWeight: 700, color: COLORS.primary, marginTop: 4, letterSpacing: 0.3 }}>{level.name}</div>
+        <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 15, fontWeight: 700, color: COLORS.primary, marginTop: 4, letterSpacing: 0.3 }}>{headline}</div>
         <div style={{ fontSize: 12, color: COLORS.textMuted, textAlign: "center", marginTop: 2, maxWidth: 230 }}>{heroMsg}</div>
       </div>
 
@@ -409,7 +385,7 @@ function CalendarScreen({ habits, entries }) {
   );
 }
 
-function StatsScreen({ habits, entries, onShare }) {
+function StatsScreen({ habits, entries, onShare, settings }) {
   const last14 = useMemo(() => {
     const arr = [];
     for (let i = 13; i >= 0; i--) {
@@ -421,6 +397,7 @@ function StatsScreen({ habits, entries, onShare }) {
   }, [habits, entries]);
   const perfectStreak = getPerfectStreak(habits, entries, todayDate());
   const level = getLevel(perfectStreak);
+  const headline = settings?.name?.trim() || level.name;
 
   return (
     <div style={{ padding: "22px 18px 90px" }}>
@@ -434,7 +411,7 @@ function StatsScreen({ habits, entries, onShare }) {
       <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 14 }}>
         <Flame score={Math.min(1, 0.4 + perfectStreak / 40)} size={72} />
         <div>
-          <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 16, fontWeight: 700, color: COLORS.primary }}>{level.name}</div>
+          <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 16, fontWeight: 700, color: COLORS.primary }}>{headline}</div>
           <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 2 }}>{level.desc}</div>
           {level.next && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Ještě {level.next.min - perfectStreak} dní do „{level.next.name}“</div>}
         </div>
@@ -474,7 +451,84 @@ function StatsScreen({ habits, entries, onShare }) {
   );
 }
 
-function ShareCard({ onClose, score, streak, level }) {
+function ProfileScreen({ habits, entries, settings, onSaveSettings }) {
+  const perfectStreak = getPerfectStreak(habits, entries, todayDate());
+  const level = getLevel(perfectStreak);
+  const score = dayScore(habits, entries, todayDate()) ?? 0;
+  const headline = settings.name?.trim() || level.name;
+  const [nameInput, setNameInput] = useState(settings.name || "");
+
+  const commitName = () => {
+    if (nameInput.trim() !== (settings.name || "")) onSaveSettings({ ...settings, name: nameInput.trim() });
+  };
+
+  return (
+    <div style={{ padding: "22px 18px 90px" }}>
+      <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 20, fontWeight: 600, marginBottom: 18 }}>Profil</div>
+
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 20, padding: "24px 16px", marginBottom: 20 }}>
+        <Flame score={score} size={110} />
+        <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 18, fontWeight: 700, color: COLORS.primary, marginTop: 8 }}>{headline}</div>
+        <div style={{ fontSize: 12, color: COLORS.textMuted, textAlign: "center", marginTop: 4, maxWidth: 240 }}>{level.desc}</div>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+        <div style={{ flex: 1, textAlign: "center", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "16px 8px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "'Unbounded', sans-serif", fontSize: 20, fontWeight: 700, color: COLORS.primary }}>
+            <FlameIcon size={16} fill={COLORS.primary} /> {perfectStreak}
+          </div>
+          <div style={{ fontSize: 10, color: COLORS.textMuted, letterSpacing: 0.5, marginTop: 4 }}>SÉRIE DNÍ</div>
+        </div>
+        <div style={{ flex: 1, textAlign: "center", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "16px 8px" }}>
+          <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 20, fontWeight: 700 }}>{habits.length}</div>
+          <div style={{ fontSize: 10, color: COLORS.textMuted, letterSpacing: 0.5, marginTop: 4 }}>NÁVYKŮ</div>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 12, letterSpacing: 1, color: COLORS.textMuted, marginBottom: 10, fontFamily: "'IBM Plex Mono', monospace" }}>NASTAVENÍ</div>
+
+      <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6 }}>TVOJE JMÉNO</div>
+        <input
+          value={nameInput}
+          onChange={e => setNameInput(e.target.value)}
+          onBlur={commitName}
+          placeholder="Zobrazí se místo názvu levelu"
+          style={{ ...inputStyle, marginBottom: 0 }}
+        />
+      </div>
+
+      <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 4 }}>BARVA APLIKACE</div>
+          <div style={{ fontSize: 12, fontFamily: "'IBM Plex Mono', monospace", color: COLORS.textMuted }}>{(settings.accent || DEFAULT_SETTINGS.accent).toUpperCase()}</div>
+        </div>
+        <input
+          type="color"
+          value={settings.accent || DEFAULT_SETTINGS.accent}
+          onChange={e => onSaveSettings({ ...settings, accent: e.target.value })}
+          style={{ width: 48, height: 48, borderRadius: 12, border: `1px solid ${COLORS.border}`, background: "none", padding: 0, cursor: "pointer" }}
+        />
+      </div>
+
+      <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 4 }}>BARVA POZADÍ</div>
+          <div style={{ fontSize: 12, fontFamily: "'IBM Plex Mono', monospace", color: COLORS.textMuted }}>{(settings.background || DEFAULT_SETTINGS.background).toUpperCase()}</div>
+        </div>
+        <input
+          type="color"
+          value={settings.background || DEFAULT_SETTINGS.background}
+          onChange={e => onSaveSettings({ ...settings, background: e.target.value })}
+          style={{ width: 48, height: 48, borderRadius: 12, border: `1px solid ${COLORS.border}`, background: "none", padding: 0, cursor: "pointer" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ShareCard({ onClose, score, streak, level, settings }) {
+  const headline = settings?.name?.trim() || level.name;
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 30, padding: 24 }}>
       <div style={{
@@ -483,7 +537,7 @@ function ShareCard({ onClose, score, streak, level }) {
         border: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8,
       }}>
         <Flame score={score} size={140} />
-        <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 22, fontWeight: 700, color: COLORS.primary, marginTop: 6 }}>{level.name}</div>
+        <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 22, fontWeight: 700, color: COLORS.primary, marginTop: 6 }}>{headline}</div>
         <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 40, fontWeight: 700 }}>{streak} dní</div>
         <div style={{ fontSize: 13, color: COLORS.textMuted }}>série bez výpadku</div>
         <div style={{ position: "absolute", bottom: 16, fontSize: 11, letterSpacing: 2, color: COLORS.textMuted, fontFamily: "'IBM Plex Mono', monospace" }}>OHÝNEK</div>
@@ -503,6 +557,8 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
   const [cat, setCat] = useState(habit?.cat || "supplement");
   const [days, setDays] = useState(habit?.days || []);
   const [target, setTarget] = useState(habit?.target || (habit?.cat === "sleep" ? 7 : 8));
+  const [once, setOnce] = useState(habit?.once || false);
+  const [onceDate, setOnceDate] = useState(habit?.date || fmt(todayDate()));
 
   const type = cat === "water" ? "counter" : cat === "sleep" ? "sleep" : "check";
 
@@ -525,7 +581,7 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
               flex: "1 1 40%", padding: "10px 0", borderRadius: 12, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
               background: cat === key ? C.color : COLORS.surface2, border: `1px solid ${cat === key ? C.color : COLORS.border}`, cursor: "pointer",
             }}>
-              <C.icon size={16} color={cat === key ? COLORS.bg : C.color} />
+              <span style={{ fontSize: 18, lineHeight: 1 }}>{C.icon}</span>
               <span style={{ fontSize: 11, color: cat === key ? COLORS.bg : COLORS.textMuted }}>{C.label}</span>
             </button>
           ))}
@@ -545,10 +601,33 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
           </>
         )}
 
-        <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, marginTop: 4 }}>DNY (prázdné = každý den)</div>
-        <DayPicker value={days} onChange={setDays} />
+        <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, marginTop: 4 }}>OPAKOVÁNÍ</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <button type="button" onClick={() => setOnce(false)} style={{
+            flex: 1, padding: "10px 0", borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: "pointer",
+            background: !once ? COLORS.primary : COLORS.surface2, color: !once ? COLORS.bg : COLORS.textMuted,
+            border: `1px solid ${!once ? COLORS.primary : COLORS.border}`,
+          }}>Opakovaný návyk</button>
+          <button type="button" onClick={() => setOnce(true)} style={{
+            flex: 1, padding: "10px 0", borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: "pointer",
+            background: once ? COLORS.primary : COLORS.surface2, color: once ? COLORS.bg : COLORS.textMuted,
+            border: `1px solid ${once ? COLORS.primary : COLORS.border}`,
+          }}>Jednorázově</button>
+        </div>
 
-        <button onClick={() => { if (name.trim()) onSave({ id: habit?.id || `${Date.now()}`, name: name.trim(), time, cat, type, target, days }); }}
+        {once ? (
+          <>
+            <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6 }}>DATUM</div>
+            <input type="date" value={onceDate} onChange={e => setOnceDate(e.target.value)} style={inputStyle} />
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6 }}>DNY (prázdné = každý den)</div>
+            <DayPicker value={days} onChange={setDays} />
+          </>
+        )}
+
+        <button onClick={() => { if (name.trim()) onSave({ id: habit?.id || `${Date.now()}`, name: name.trim(), time, cat, type, target, once, days: once ? [] : days, date: once ? onceDate : null }); }}
           style={{ width: "100%", background: COLORS.primary, border: "none", borderRadius: 14, padding: "13px 0", color: COLORS.bg, fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: `0 0 20px ${hexA(COLORS.primary, 0.4)}` }}>
           {isEdit ? "Uložit změny" : "Přidat návyk"}
         </button>
@@ -563,7 +642,7 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
   );
 }
 
-function LevelUpBanner({ level, onClose }) {
+function LevelUpBanner({ level, onClose, settings }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40, padding: 30 }} onClick={onClose}>
       <div style={{ textAlign: "center" }}>
@@ -580,6 +659,8 @@ function LevelUpBanner({ level, onClose }) {
 // ============================================================================
 // ROOT
 // ============================================================================
+const DEFAULT_SETTINGS = { name: "", accent: "#C13BFF", background: "#0E0A16" };
+
 export default function HabitApp() {
   const [tab, setTab] = useState("today");
   const [habits, setHabits] = useState(DEFAULT_HABITS);
@@ -588,15 +669,19 @@ export default function HabitApp() {
   const [showShare, setShowShare] = useState(false);
   const [levelUp, setLevelUp] = useState(null);
   const [ready, setReady] = useState(false);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const todayKey = fmt(todayDate());
+  COLORS.primary = settings.accent || DEFAULT_SETTINGS.accent; // app-wide accent, chosen in Profil
+  COLORS.bg = settings.background || DEFAULT_SETTINGS.background; // app background, chosen in Profil
 
   useEffect(() => {
     (async () => {
-      let h = DEFAULT_HABITS, e = {}, lastLevel = null;
+      let h = DEFAULT_HABITS, e = {}, lastLevel = null, s = DEFAULT_SETTINGS;
       try { const r = await storage.get("habits", false); if (r) h = JSON.parse(r.value); } catch {}
       try { const r = await storage.get("entries", false); if (r) e = JSON.parse(r.value); } catch {}
       try { const r = await storage.get("lastLevel", false); if (r) lastLevel = JSON.parse(r.value); } catch {}
-      setHabits(h); setEntries(e);
+      try { const r = await storage.get("settings", false); if (r) s = { ...DEFAULT_SETTINGS, ...JSON.parse(r.value) }; } catch {}
+      setHabits(h); setEntries(e); setSettings(s);
       scheduleAllNotifications(h).catch(() => {});
       const lvl = getLevel(getPerfectStreak(h, e, todayDate()));
       if (lastLevel && lastLevel !== lvl.name && LEVELS.findIndex(l => l.name === lvl.name) > LEVELS.findIndex(l => l.name === lastLevel)) {
@@ -605,6 +690,11 @@ export default function HabitApp() {
       try { await storage.set("lastLevel", JSON.stringify(lvl.name), false); } catch {}
       setReady(true);
     })();
+  }, []);
+
+  const saveSettings = useCallback(async (next) => {
+    setSettings(next);
+    try { await storage.set("settings", JSON.stringify(next), false); } catch {}
   }, []);
 
   const saveHabits = useCallback(async (next) => {
@@ -662,22 +752,29 @@ export default function HabitApp() {
       `}</style>
 
       <div style={{ minHeight: "100vh" }}>
-        {ready && tab === "today" && <TodayScreen habits={habits} entries={entries} onCheck={onCheck} onAdjust={onAdjust} todayKey={todayKey} onEdit={(h) => setModal(h)} />}
+        {ready && tab === "today" && <TodayScreen habits={habits} entries={entries} onCheck={onCheck} onAdjust={onAdjust} todayKey={todayKey} onEdit={(h) => setModal(h)} settings={settings} />}
         {ready && tab === "calendar" && <CalendarScreen habits={habits} entries={entries} />}
-        {ready && tab === "stats" && <StatsScreen habits={habits} entries={entries} onShare={() => setShowShare(true)} />}
+        {ready && tab === "stats" && <StatsScreen habits={habits} entries={entries} onShare={() => setShowShare(true)} settings={settings} />}
+        {ready && tab === "profile" && <ProfileScreen habits={habits} entries={entries} settings={settings} onSaveSettings={saveSettings} />}
       </div>
 
       {modal && <HabitModal habit={modal === "add" ? null : modal} onClose={() => setModal(null)} onSave={saveHabit} onDelete={deleteHabit} />}
-      {showShare && <ShareCard onClose={() => setShowShare(false)} score={score} streak={perfectStreak} level={level} />}
-      {levelUp && <LevelUpBanner level={levelUp} onClose={() => setLevelUp(null)} />}
+      {showShare && <ShareCard onClose={() => setShowShare(false)} score={score} streak={perfectStreak} level={level} settings={settings} />}
+      {levelUp && <LevelUpBanner level={levelUp} onClose={() => setLevelUp(null)} settings={settings} />}
 
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 78, background: "rgba(26,19,38,0.92)", backdropFilter: "blur(8px)", borderTop: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "space-around", padding: "0 6px" }}>
         <TabBtn icon={Home} label="Dnes" active={tab === "today"} onClick={() => setTab("today")} />
         <TabBtn icon={CalendarDays} label="Kalendář" active={tab === "calendar"} onClick={() => setTab("calendar")} />
-        <button onClick={() => setModal("add")} style={{ width: 50, height: 50, borderRadius: "50%", background: COLORS.primary, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginTop: -30, boxShadow: `0 0 22px ${hexA(COLORS.primary, 0.6)}`, flexShrink: 0 }}>
-          <Plus size={22} color={COLORS.bg} strokeWidth={2.5} />
+        <button onClick={() => setModal("add")} style={{
+          width: 62, height: 62, borderRadius: "50%", border: `1.5px solid ${hexA("#FFFFFF", 0.22)}`,
+          background: `linear-gradient(145deg, ${COLORS.secondary} 0%, ${COLORS.primary} 55%, ${COLORS.sleepC} 100%)`,
+          display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginTop: -34, flexShrink: 0,
+          boxShadow: `0 0 0 6px ${COLORS.surface}, 0 10px 24px rgba(0,0,0,0.4), 0 0 26px ${hexA(COLORS.primary, 0.55)}, inset 0 1px 0 ${hexA("#FFFFFF", 0.35)}`,
+        }}>
+          <Plus size={24} color="#FFFFFF" strokeWidth={2.6} />
         </button>
         <TabBtn icon={BarChart3} label="Statistiky" active={tab === "stats"} onClick={() => setTab("stats")} />
+        <TabBtn icon={User} label="Profil" active={tab === "profile"} onClick={() => setTab("profile")} />
       </div>
     </div>
   );

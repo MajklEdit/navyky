@@ -23,6 +23,9 @@ jobs:
       - name: Přidat Android platformu
         run: npx cap add android
 
+      - name: Vygenerovat ikonu appky
+        run: npx capacitor-assets generate --android
+
       - name: Zabuildit web (Vite)
         run: npm run build
 
