@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Pill, Dumbbell, Droplets, Moon, Flame as FlameIcon, Check, ChevronLeft, ChevronRight,
-  Plus, X, CalendarDays, BarChart3, Home, Trash2, Pencil, Minus, Share2, Sparkles,
+  Plus, X, CalendarDays, BarChart3, Home, Trash2, Pencil, Minus, Share2, Sparkles, Bell,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import storage from "./storage";
@@ -21,6 +21,7 @@ const COLORS = {
   secondary: "#22E0D8", // training — neon teal
   water: "#2FA9FF",     // water — electric blue
   sleepC: "#FF4FD8",    // sleep — neon pink
+  custom: "#FFA53D",    // custom activity — neon amber
   danger: "#E0527A",
 };
 
@@ -39,6 +40,7 @@ const CATS = {
   training: { color: COLORS.secondary, icon: Dumbbell, label: "Trénink" },
   water: { color: COLORS.water, icon: Droplets, label: "Pitný režim" },
   sleep: { color: COLORS.sleepC, icon: Moon, label: "Spánek" },
+  custom: { color: COLORS.custom, icon: Bell, label: "Aktivita" },
 };
 
 const DOW = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"];
@@ -58,13 +60,7 @@ function getLevel(streak) {
   return { ...cur, next };
 }
 
-const DEFAULT_HABITS = [
-  { id: "kreatin", name: "Kreatin", time: "08:00", cat: "supplement", type: "check", days: [] },
-  { id: "prasky", name: "Prášky", time: "20:00", cat: "supplement", type: "check", days: [] },
-  { id: "trenink", name: "Trénink", time: "18:00", cat: "training", type: "check", days: [0, 2, 4] },
-  { id: "voda", name: "Pitný režim", time: "celý den", cat: "water", type: "counter", target: 8, days: [] },
-  { id: "spanek", name: "Spánek", time: "ráno", cat: "sleep", type: "sleep", target: 7, days: [] },
-];
+const DEFAULT_HABITS = [];
 
 // ============================================================================
 // HELPERS
@@ -233,6 +229,48 @@ function DayPicker({ value, onChange }) {
   );
 }
 
+const TIME_PRESETS = [
+  ["Ráno", "07:00"], ["Poledne", "12:00"], ["Odpoledne", "15:00"], ["Večer", "19:00"], ["Noc", "22:00"],
+];
+
+function TimeStepper({ label, value, onDec, onInc }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+      <button type="button" onClick={onInc} style={stepperBtn}><Plus size={14} color={COLORS.text} /></button>
+      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 30, fontWeight: 700, color: COLORS.text, minWidth: 48, textAlign: "center" }}>
+        {String(value).padStart(2, "0")}
+      </div>
+      <button type="button" onClick={onDec} style={stepperBtn}><Minus size={14} color={COLORS.text} /></button>
+      <div style={{ fontSize: 9, letterSpacing: 1, color: COLORS.textMuted }}>{label}</div>
+    </div>
+  );
+}
+
+// 24h European time picker — no native <input type="time">, so no locale-dependent AM/PM
+function TimePicker({ value, onChange }) {
+  const [h, m] = value.split(":").map(Number);
+  const set = (nh, nm) => onChange(`${String(((nh % 24) + 24) % 24).padStart(2, "0")}:${String(((nm % 60) + 60) % 60).padStart(2, "0")}`);
+
+  return (
+    <div style={{ background: COLORS.surface2, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "16px 16px 14px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <TimeStepper label="HODIN" value={h} onInc={() => set(h + 1, m)} onDec={() => set(h - 1, m)} />
+        <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 30, fontWeight: 700, color: COLORS.textMuted, marginTop: -18 }}>:</div>
+        <TimeStepper label="MINUT" value={m} onInc={() => set(h, m + 5)} onDec={() => set(h, m - 5)} />
+      </div>
+      <div style={{ display: "flex", gap: 6, marginTop: 14, flexWrap: "wrap", justifyContent: "center" }}>
+        {TIME_PRESETS.map(([label, t]) => (
+          <button key={t} type="button" onClick={() => onChange(t)} style={{
+            padding: "6px 10px", borderRadius: 10, fontSize: 11, cursor: "pointer",
+            background: value === t ? COLORS.primary : COLORS.surface, color: value === t ? COLORS.bg : COLORS.textMuted,
+            border: `1px solid ${value === t ? COLORS.primary : COLORS.border}`,
+          }}>{label} · {t}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ============================================================================
 // SCREENS
 // ============================================================================
@@ -254,25 +292,25 @@ function TodayScreen({ habits, entries, onCheck, onAdjust, todayKey, onEdit }) {
 
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 0 18px" }}>
         <Flame score={score} />
-        <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 15, fontWeight: 700, color: COLORS.primary, marginTop: 4, letterSpacing: 0.3 }}>{level.name}</div>
+        <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 15, fontWeight: 700, color: COLORS.primary, marginTop: 4, letterSpacing: 0.3 }}>{level.name}</div>
         <div style={{ fontSize: 12, color: COLORS.textMuted, textAlign: "center", marginTop: 2, maxWidth: 230 }}>{heroMsg}</div>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 18, padding: "14px 16px", marginBottom: 22 }}>
         <div style={{ textAlign: "center", flex: 1 }}>
-          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 700 }}>{doneCount}/{scheduled.length}</div>
+          <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 18, fontWeight: 700 }}>{doneCount}/{scheduled.length}</div>
           <div style={{ fontSize: 10, color: COLORS.textMuted, letterSpacing: 0.5 }}>DNES</div>
         </div>
         <div style={{ width: 1, height: 28, background: COLORS.border }} />
         <div style={{ textAlign: "center", flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 700, color: COLORS.primary }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "'Unbounded', sans-serif", fontSize: 18, fontWeight: 700, color: COLORS.primary }}>
             <FlameIcon size={15} fill={COLORS.primary} /> {perfectStreak}
           </div>
           <div style={{ fontSize: 10, color: COLORS.textMuted, letterSpacing: 0.5 }}>SÉRIE DNÍ</div>
         </div>
         <div style={{ width: 1, height: 28, background: COLORS.border }} />
         <div style={{ textAlign: "center", flex: 1 }}>
-          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 700 }}>{pct}%</div>
+          <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 18, fontWeight: 700 }}>{pct}%</div>
           <div style={{ fontSize: 10, color: COLORS.textMuted, letterSpacing: 0.5 }}>VITALITA</div>
         </div>
       </div>
@@ -289,7 +327,7 @@ function TodayScreen({ habits, entries, onCheck, onAdjust, todayKey, onEdit }) {
                 <button onClick={() => onCheck(h.id)} style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
                   <IconBadge cat={h.cat} done={done} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, textDecoration: done ? "line-through" : "none", opacity: done ? 0.6 : 1 }}>{h.name}</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#FFFFFF", textDecoration: done ? "line-through" : "none", opacity: done ? 0.6 : 1 }}>{h.name}</div>
                     <div style={{ fontSize: 12, color: COLORS.textMuted, fontFamily: "'IBM Plex Mono', monospace" }}>{h.time}</div>
                   </div>
                   <div style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: done ? C.color : "transparent", border: `1.5px solid ${done ? C.color : COLORS.border}` }}>
@@ -300,7 +338,7 @@ function TodayScreen({ habits, entries, onCheck, onAdjust, todayKey, onEdit }) {
                 <>
                   <IconBadge cat={h.cat} done={done} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600 }}>{h.name}</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#FFFFFF" }}>{h.name}</div>
                     <div style={{ fontSize: 12, color: COLORS.textMuted, fontFamily: "'IBM Plex Mono', monospace" }}>
                       {h.type === "sleep" ? `${(raw || 0)} / ${h.target} h` : `${(raw || 0)} / ${h.target} sklenic`}
                     </div>
@@ -337,7 +375,7 @@ function CalendarScreen({ habits, entries }) {
     <div style={{ padding: "22px 18px 90px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <button onClick={() => setCursor(new Date(year, month - 1, 1))} style={navBtn}><ChevronLeft size={18} color={COLORS.text} /></button>
-        <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 600, textTransform: "capitalize" }}>{MONTHS[month]} {year}</div>
+        <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 18, fontWeight: 600, textTransform: "capitalize" }}>{MONTHS[month]} {year}</div>
         <button onClick={() => setCursor(new Date(year, month + 1, 1))} style={navBtn}><ChevronRight size={18} color={COLORS.text} /></button>
       </div>
 
@@ -387,7 +425,7 @@ function StatsScreen({ habits, entries, onShare }) {
   return (
     <div style={{ padding: "22px 18px 90px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-        <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 600 }}>Statistiky</div>
+        <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 20, fontWeight: 600 }}>Statistiky</div>
         <button onClick={onShare} style={{ display: "flex", alignItems: "center", gap: 6, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "7px 12px", color: COLORS.text, fontSize: 12, cursor: "pointer" }}>
           <Share2 size={13} /> Sdílet
         </button>
@@ -396,7 +434,7 @@ function StatsScreen({ habits, entries, onShare }) {
       <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 14 }}>
         <Flame score={Math.min(1, 0.4 + perfectStreak / 40)} size={72} />
         <div>
-          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, fontWeight: 700, color: COLORS.primary }}>{level.name}</div>
+          <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 16, fontWeight: 700, color: COLORS.primary }}>{level.name}</div>
           <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 2 }}>{level.desc}</div>
           {level.next && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Ještě {level.next.min - perfectStreak} dní do „{level.next.name}“</div>}
         </div>
@@ -438,15 +476,15 @@ function StatsScreen({ habits, entries, onShare }) {
 
 function ShareCard({ onClose, score, streak, level }) {
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 30, padding: 24 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 30, padding: 24 }}>
       <div style={{
         width: "100%", aspectRatio: "9/16", maxHeight: "78%", borderRadius: 24, overflow: "hidden", position: "relative",
         background: `radial-gradient(circle at 50% 30%, ${hexA(COLORS.primary, 0.35)} 0%, ${COLORS.bg} 65%)`,
         border: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8,
       }}>
         <Flame score={score} size={140} />
-        <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 700, color: COLORS.primary, marginTop: 6 }}>{level.name}</div>
-        <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 40, fontWeight: 700 }}>{streak} dní</div>
+        <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 22, fontWeight: 700, color: COLORS.primary, marginTop: 6 }}>{level.name}</div>
+        <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 40, fontWeight: 700 }}>{streak} dní</div>
         <div style={{ fontSize: 13, color: COLORS.textMuted }}>série bez výpadku</div>
         <div style={{ position: "absolute", bottom: 16, fontSize: 11, letterSpacing: 2, color: COLORS.textMuted, fontFamily: "'IBM Plex Mono', monospace" }}>OHÝNEK</div>
       </div>
@@ -469,10 +507,10 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
   const type = cat === "water" ? "counter" : cat === "sleep" ? "sleep" : "check";
 
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "flex-end", zIndex: 20 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "flex-end", zIndex: 20 }}>
       <div style={{ width: "100%", background: COLORS.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, border: `1px solid ${COLORS.border}`, maxHeight: "88%", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 17, fontWeight: 600 }}>{isEdit ? "Upravit návyk" : "Nový návyk"}</div>
+          <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 17, fontWeight: 600 }}>{isEdit ? "Upravit návyk" : "Nový návyk"}</div>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={20} color={COLORS.textMuted} /></button>
         </div>
 
@@ -496,7 +534,9 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
         {type === "check" ? (
           <>
             <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6 }}>ČAS</div>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)} style={inputStyle} />
+            <div style={{ marginBottom: 16 }}>
+              <TimePicker value={time} onChange={setTime} />
+            </div>
           </>
         ) : (
           <>
@@ -525,11 +565,11 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
 
 function LevelUpBanner({ level, onClose }) {
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40, padding: 30 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40, padding: 30 }} onClick={onClose}>
       <div style={{ textAlign: "center" }}>
         <Flame score={0.95} size={150} />
         <div style={{ fontSize: 12, letterSpacing: 2, color: COLORS.textMuted, marginTop: 8 }}>NOVÝ LEVEL</div>
-        <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 28, fontWeight: 700, color: COLORS.primary, marginTop: 4 }}>{level.name}</div>
+        <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 28, fontWeight: 700, color: COLORS.primary, marginTop: 4 }}>{level.name}</div>
         <div style={{ fontSize: 13, color: COLORS.textMuted, marginTop: 6, maxWidth: 240 }}>{level.desc}</div>
         <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 18 }}>ťukni pro pokračování</div>
       </div>
@@ -608,10 +648,11 @@ export default function HabitApp() {
   const level = getLevel(perfectStreak);
 
   return (
-    <div style={{ minHeight: "100vh", background: `radial-gradient(circle at 30% 0%, #241338 0%, ${COLORS.bg} 60%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: `radial-gradient(circle at 30% 0%, #241338 0%, ${COLORS.bg} 60%)`, color: COLORS.text, fontFamily: "'Manrope', sans-serif", position: "relative" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
         * { box-sizing: border-box; }
+        html, body, #root { min-height: 100%; }
         button { font-family: inherit; }
         @keyframes flicker { 0%,100% { transform: scale(1) rotate(-1deg); } 50% { transform: scale(1.035) rotate(1deg); } }
         .fire-flicker { animation: flicker 2.6s ease-in-out infinite; }
@@ -620,27 +661,23 @@ export default function HabitApp() {
         .sparkle-b { animation: sparkleFloat 1.8s ease-in-out infinite .5s; }
       `}</style>
 
-      <div style={{ width: 380, height: 780, background: COLORS.bg, borderRadius: 44, border: `8px solid #08060D`, boxShadow: `0 30px 90px rgba(0,0,0,0.65), 0 0 60px ${hexA(COLORS.primary, 0.12)}`, position: "relative", overflow: "hidden", color: COLORS.text }}>
-        <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 120, height: 26, background: "#08060D", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, zIndex: 10 }} />
+      <div style={{ minHeight: "100vh" }}>
+        {ready && tab === "today" && <TodayScreen habits={habits} entries={entries} onCheck={onCheck} onAdjust={onAdjust} todayKey={todayKey} onEdit={(h) => setModal(h)} />}
+        {ready && tab === "calendar" && <CalendarScreen habits={habits} entries={entries} />}
+        {ready && tab === "stats" && <StatsScreen habits={habits} entries={entries} onShare={() => setShowShare(true)} />}
+      </div>
 
-        <div style={{ height: "100%", overflowY: "auto" }}>
-          {ready && tab === "today" && <TodayScreen habits={habits} entries={entries} onCheck={onCheck} onAdjust={onAdjust} todayKey={todayKey} onEdit={(h) => setModal(h)} />}
-          {ready && tab === "calendar" && <CalendarScreen habits={habits} entries={entries} />}
-          {ready && tab === "stats" && <StatsScreen habits={habits} entries={entries} onShare={() => setShowShare(true)} />}
-        </div>
+      {modal && <HabitModal habit={modal === "add" ? null : modal} onClose={() => setModal(null)} onSave={saveHabit} onDelete={deleteHabit} />}
+      {showShare && <ShareCard onClose={() => setShowShare(false)} score={score} streak={perfectStreak} level={level} />}
+      {levelUp && <LevelUpBanner level={levelUp} onClose={() => setLevelUp(null)} />}
 
-        {modal && <HabitModal habit={modal === "add" ? null : modal} onClose={() => setModal(null)} onSave={saveHabit} onDelete={deleteHabit} />}
-        {showShare && <ShareCard onClose={() => setShowShare(false)} score={score} streak={perfectStreak} level={level} />}
-        {levelUp && <LevelUpBanner level={levelUp} onClose={() => setLevelUp(null)} />}
-
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 78, background: "rgba(26,19,38,0.92)", backdropFilter: "blur(8px)", borderTop: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "space-around", padding: "0 6px" }}>
-          <TabBtn icon={Home} label="Dnes" active={tab === "today"} onClick={() => setTab("today")} />
-          <TabBtn icon={CalendarDays} label="Kalendář" active={tab === "calendar"} onClick={() => setTab("calendar")} />
-          <button onClick={() => setModal("add")} style={{ width: 50, height: 50, borderRadius: "50%", background: COLORS.primary, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginTop: -30, boxShadow: `0 0 22px ${hexA(COLORS.primary, 0.6)}`, flexShrink: 0 }}>
-            <Plus size={22} color={COLORS.bg} strokeWidth={2.5} />
-          </button>
-          <TabBtn icon={BarChart3} label="Statistiky" active={tab === "stats"} onClick={() => setTab("stats")} />
-        </div>
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 78, background: "rgba(26,19,38,0.92)", backdropFilter: "blur(8px)", borderTop: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "space-around", padding: "0 6px" }}>
+        <TabBtn icon={Home} label="Dnes" active={tab === "today"} onClick={() => setTab("today")} />
+        <TabBtn icon={CalendarDays} label="Kalendář" active={tab === "calendar"} onClick={() => setTab("calendar")} />
+        <button onClick={() => setModal("add")} style={{ width: 50, height: 50, borderRadius: "50%", background: COLORS.primary, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginTop: -30, boxShadow: `0 0 22px ${hexA(COLORS.primary, 0.6)}`, flexShrink: 0 }}>
+          <Plus size={22} color={COLORS.bg} strokeWidth={2.5} />
+        </button>
+        <TabBtn icon={BarChart3} label="Statistiky" active={tab === "stats"} onClick={() => setTab("stats")} />
       </div>
     </div>
   );

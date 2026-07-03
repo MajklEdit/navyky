@@ -15,6 +15,22 @@ function hashId(str) {
   return h % 1000000;
 }
 
+// first future date/time this hour:minute (optionally locked to a Capacitor weekday, Sun=1..Sat=7) occurs —
+// always strictly in the future, so the very first notification never fires immediately at schedule-time
+function nextOccurrence(hour, minute, weekday) {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0, 0);
+  if (weekday == null) {
+    if (next <= now) next.setDate(next.getDate() + 1);
+  } else {
+    const jsTargetDay = weekday - 1; // Capacitor Sun=1..Sat=7 -> JS Sun=0..Sat=6
+    let diff = (jsTargetDay - next.getDay() + 7) % 7;
+    if (diff === 0 && next <= now) diff = 7;
+    next.setDate(next.getDate() + diff);
+  }
+  return next;
+}
+
 export async function requestPermissions() {
   const perm = await LocalNotifications.checkPermissions();
   if (perm.display !== "granted") {
@@ -39,16 +55,19 @@ export async function scheduleHabitNotifications(habit) {
   const [hour, minute] = habit.time.split(":").map(Number);
   const days = habit.days && habit.days.length > 0 ? habit.days : [null];
 
-  const notifications = days.map((d) => ({
-    id: hashId(`${habit.id}-${d}`),
-    title: "Ohýnek",
-    body: `Čas na: ${habit.name}`,
-    schedule: {
-      on: d === null ? { hour, minute } : { hour, minute, weekday: toCapacitorWeekday(d) },
-      repeats: true,
-      allowWhileIdle: true,
-    },
-  }));
+  const notifications = days.map((d) => {
+    const weekday = d === null ? null : toCapacitorWeekday(d);
+    return {
+      id: hashId(`${habit.id}-${d}`),
+      title: "Ohýnek",
+      body: `Čas na: ${habit.name}`,
+      schedule: {
+        at: nextOccurrence(hour, minute, weekday),
+        every: weekday == null ? "day" : "week",
+        allowWhileIdle: true,
+      },
+    };
+  });
 
   await LocalNotifications.schedule({ notifications });
 }
