@@ -64,7 +64,7 @@ export async function scheduleHabitNotifications(habit) {
     await LocalNotifications.schedule({
       notifications: [{
         id: hashId(`${habit.id}-once`),
-        title: "FireHabits",
+        title: "FireUp",
         body: `Čas na: ${habit.name}`,
         schedule: { at, allowWhileIdle: true },
       }],
@@ -77,7 +77,7 @@ export async function scheduleHabitNotifications(habit) {
     const weekday = d === null ? null : toCapacitorWeekday(d);
     return {
       id: hashId(`${habit.id}-${d}`),
-      title: "FireHabits",
+      title: "FireUp",
       body: `Čas na: ${habit.name}`,
       schedule: {
         at: nextOccurrence(hour, minute, weekday),
