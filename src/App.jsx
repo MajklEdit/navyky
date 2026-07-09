@@ -1149,9 +1149,9 @@ function ShareCard({ onClose, score, streak, level, xp, settings }) {
       ctx.font = "600 14px 'IBM Plex Mono', monospace";
       ctx.fillStyle = COLORS.textMuted;
       ctx.fillText(label, x + 16, y + 23);
-      ctx.font = "800 34px Unbounded, sans-serif";
+      ctx.font = "800 38px Unbounded, sans-serif";
       ctx.fillStyle = COLORS.primary;
-      ctx.fillText(value, x + 16, y + 60);
+      ctx.fillText(value, x + 16, y + 62);
     });
 
     const link = document.createElement("a");
@@ -1195,7 +1195,7 @@ function SharePill({ label, value }) {
   return (
     <div style={{ ...glassSurface(0.42), borderRadius: 10, padding: "5px 7px 6px", minWidth: 0, flex: 1 }}>
       <div style={{ fontSize: 8, color: COLORS.textMuted, letterSpacing: 0.7, whiteSpace: "nowrap" }}>{label}</div>
-      <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 17, fontWeight: 800, color: COLORS.primary, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1 }}>{value}</div>
+      <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 19, fontWeight: 800, color: COLORS.primary, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1 }}>{value}</div>
     </div>
   );
 }
