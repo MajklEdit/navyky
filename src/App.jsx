@@ -22,6 +22,7 @@ const COLORS = {
   water: "#2FA9FF",     // water — electric blue
   sleepC: "#FF4FD8",    // sleep — neon pink
   custom: "#FFA53D",    // custom activity — neon amber
+  oneoff: "#34C759",    // one-off activity — iOS green
   danger: "#E0527A",
 };
 
@@ -45,6 +46,7 @@ const CATS = {
   water: { color: COLORS.water, icon: "💧", label: "Pitný režim" },
   sleep: { color: COLORS.sleepC, icon: "🌙", label: "Spánek" },
   custom: { color: COLORS.custom, icon: "🔔", label: "Aktivita" },
+  oneoff: { color: COLORS.oneoff, icon: "✅", label: "Jednorázová" },
 };
 
 const DOW = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"];
@@ -1061,7 +1063,7 @@ function ProfileScreen({ habits, entries, settings, onSaveSettings }) {
 
 function ShareCard({ onClose, score, streak, level, xp, settings }) {
   const headline = settings?.name?.trim() || level.name;
-  const downloadSharePng = () => {
+  const downloadSharePng = async () => {
     const scale = 3;
     const width = 860;
     const height = 236;
@@ -1154,14 +1156,26 @@ function ShareCard({ onClose, score, streak, level, xp, settings }) {
       ctx.fillText(value, x + 16, y + 62);
     });
 
+    const fileName = `fireup-share-${fmt(todayDate())}.png`;
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+    if (!blob) return;
+    const file = new File([blob], fileName, { type: "image/png" });
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: "FireUp" });
+      return;
+    }
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.download = `fireup-share-${fmt(todayDate())}.png`;
-    link.href = canvas.toDataURL("image/png");
+    link.download = fileName;
+    link.href = url;
+    document.body.appendChild(link);
     link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1200);
   };
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 30, padding: 24 }}>
-      <div style={{
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 30, padding: 24, overflow: "hidden", overscrollBehavior: "contain" }}>
+      <div className="share-notification-card" style={{
         width: "100%", maxWidth: 430, minHeight: 118, borderRadius: 26, overflow: "hidden", position: "relative",
         background: `radial-gradient(circle at 82% 26%, ${hexA(COLORS.primary, 0.3)} 0%, transparent 42%), linear-gradient(135deg, ${hexA(COLORS.surface, 0.92)}, ${hexA(COLORS.bg, 0.96)})`,
         border: `1px solid ${hexA(COLORS.primary, 0.28)}`, display: "flex", alignItems: "center", gap: 14, padding: "14px 16px",
@@ -1176,7 +1190,7 @@ function ShareCard({ onClose, score, streak, level, xp, settings }) {
             <div style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS.primary, boxShadow: `0 0 12px ${hexA(COLORS.primary, 0.8)}` }} />
           </div>
           <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 18, fontWeight: 800, color: COLORS.text, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{headline}</div>
-          <div style={{ display: "flex", gap: 6, marginTop: 9, flexWrap: "nowrap" }}>
+          <div style={{ display: "flex", gap: 6, marginTop: 9, flexWrap: "nowrap", minWidth: 0 }}>
             <SharePill label="LEVEL" value={`LVL ${level.number}`} />
             <SharePill label="STREAK" value={`${streak}`} />
             <SharePill label="XP" value={`${xp}`} />
@@ -1193,9 +1207,9 @@ function ShareCard({ onClose, score, streak, level, xp, settings }) {
 
 function SharePill({ label, value }) {
   return (
-    <div style={{ ...glassSurface(0.42), borderRadius: 10, padding: "5px 7px 6px", minWidth: 0, flex: 1 }}>
+    <div style={{ ...glassSurface(0.42), borderRadius: 10, padding: "5px 6px 6px", minWidth: 0, flex: "1 1 0" }}>
       <div style={{ fontSize: 8, color: COLORS.textMuted, letterSpacing: 0.7, whiteSpace: "nowrap" }}>{label}</div>
-      <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 19, fontWeight: 800, color: COLORS.primary, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1 }}>{value}</div>
+      <div className="share-pill-value" style={{ fontFamily: "'Unbounded', sans-serif", fontSize: "clamp(14px, 4.7vw, 19px)", fontWeight: 800, color: COLORS.primary, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1 }}>{value}</div>
     </div>
   );
 }
@@ -1214,7 +1228,19 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
   const saveTimer = useRef(null);
 
   const type = cat === "water" ? "counter" : cat === "sleep" ? "sleep" : cat === "custom" ? "checklist" : "check";
+  const forcedOnce = cat === "oneoff";
+  const plannedOnce = forcedOnce || once;
   const cleanChecklist = checklist.map(item => ({ ...item, text: item.text.trim() })).filter(item => item.text);
+  const handleFieldFocus = (event) => {
+    window.setTimeout(() => event.target.scrollIntoView({ block: "center", behavior: "smooth" }), 220);
+  };
+  const selectCategory = (key) => {
+    setCat(key);
+    if (key === "oneoff") {
+      setOnce(true);
+      if (!onceDate) setOnceDate(fmt(todayDate()));
+    }
+  };
   const buildHabitPayload = () => ({
     id: habit?.id || `${Date.now()}`,
     name: name.trim(),
@@ -1223,9 +1249,9 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
     type,
     target,
     checklist: type === "checklist" ? cleanChecklist : [],
-    once,
-    days: once ? [] : days,
-    date: once ? onceDate : null,
+    once: plannedOnce,
+    days: plannedOnce ? [] : days,
+    date: plannedOnce ? onceDate : null,
   });
 
   const handleSave = () => {
@@ -1249,7 +1275,8 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
       background: `linear-gradient(180deg, ${hexA(COLORS.bg, 0.58)}, rgba(0,0,0,0.72))`,
       backdropFilter: "blur(14px)",
       WebkitBackdropFilter: "blur(14px)",
-      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 20, padding: 16
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 20, padding: 16,
+      overscrollBehavior: "contain",
     }}>
       <div className="habit-modal-card" style={{
         width: "100%",
@@ -1260,7 +1287,7 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
         borderRadius: 26,
         border: `1px solid ${hexA(COLORS.primary, 0.22)}`,
         boxShadow: `0 24px 80px rgba(0,0,0,0.55), inset 0 1px 0 ${hexA("#FFFFFF", 0.08)}`,
-        maxHeight: "88vh",
+        maxHeight: "calc(100dvh - 32px)",
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
@@ -1281,16 +1308,16 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
           </div>
         )}
 
-        <div className="hide-scrollbar" style={{ overflowY: "auto", padding: "18px 20px 20px" }}>
+        <div className="hide-scrollbar" style={{ overflowY: "auto", padding: "18px 20px 100px", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}>
 
         <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6 }}>NÁZEV</div>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Např. Vitamín D"
+        <input value={name} onFocus={handleFieldFocus} onChange={e => setName(e.target.value)} placeholder="Např. Vitamín D"
           style={inputStyle} />
 
         <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6 }}>TYP</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
           {Object.entries(CATS).map(([key, C]) => (
-            <button key={key} onClick={() => setCat(key)} style={{
+            <button key={key} onClick={() => selectCategory(key)} style={{
               flex: "1 1 40%", padding: "10px 0", borderRadius: 12, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
               background: cat === key ? C.color : COLORS.surface2, border: `1px solid ${cat === key ? C.color : COLORS.border}`, cursor: "pointer",
             }}>
@@ -1314,6 +1341,7 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
                     <div key={item.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <input
                         value={item.text}
+                        onFocus={handleFieldFocus}
                         onChange={e => setChecklist(checklist.map(x => x.id === item.id ? { ...x, text: e.target.value } : x))}
                         placeholder={`Bod ${index + 1}`}
                         style={{ ...inputStyle, marginBottom: 0 }}
@@ -1337,25 +1365,26 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
         ) : (
           <>
             <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6 }}>DENNÍ CÍL ({type === "sleep" ? "hodin" : "sklenic"})</div>
-            <input type="number" min="1" value={target} onChange={e => setTarget(Number(e.target.value))} style={inputStyle} />
+            <input type="number" min="1" value={target} onFocus={handleFieldFocus} onChange={e => setTarget(Number(e.target.value))} style={inputStyle} />
           </>
         )}
 
         <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, marginTop: 4 }}>PLÁN</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <button type="button" onClick={() => setOnce(false)} style={{
+          <button type="button" onClick={() => !forcedOnce && setOnce(false)} disabled={forcedOnce} style={{
             flex: 1, padding: "10px 0", borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: "pointer",
-            background: !once ? COLORS.primary : COLORS.surface2, color: !once ? COLORS.bg : COLORS.textMuted,
-            border: `1px solid ${!once ? COLORS.primary : COLORS.border}`,
+            background: !plannedOnce ? COLORS.primary : COLORS.surface2, color: !plannedOnce ? COLORS.bg : COLORS.textMuted,
+            border: `1px solid ${!plannedOnce ? COLORS.primary : COLORS.border}`,
+            opacity: forcedOnce ? 0.42 : 1,
           }}>Opakovaně</button>
           <button type="button" onClick={() => setOnce(true)} style={{
             flex: 1, padding: "10px 0", borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: "pointer",
-            background: once ? COLORS.primary : COLORS.surface2, color: once ? COLORS.bg : COLORS.textMuted,
-            border: `1px solid ${once ? COLORS.primary : COLORS.border}`,
+            background: plannedOnce ? COLORS.primary : COLORS.surface2, color: plannedOnce ? COLORS.bg : COLORS.textMuted,
+            border: `1px solid ${plannedOnce ? COLORS.primary : COLORS.border}`,
           }}>Konkrétní datum</button>
         </div>
 
-        {once ? (
+        {plannedOnce ? (
           <>
             <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6 }}>DATUM</div>
             <DatePickerCard value={onceDate} onChange={setOnceDate} />
@@ -1367,16 +1396,17 @@ function HabitModal({ habit, onClose, onSave, onDelete }) {
           </>
         )}
 
-        <button onClick={handleSave} disabled={saved}
-          style={{ width: "100%", background: COLORS.primary, border: "none", borderRadius: 14, padding: "13px 0", color: COLORS.bg, fontWeight: 700, fontSize: 14, cursor: saved ? "default" : "pointer", boxShadow: `0 0 20px ${hexA(COLORS.primary, 0.4)}`, opacity: saved ? 0.76 : 1, transition: "opacity .18s ease, transform .18s ease" }}>
-          {saved ? "Přidáno" : isEdit ? "Uložit změny" : "Přidat návyk"}
-        </button>
-
         {isEdit && (
           <button onClick={() => onDelete(habit.id)} style={{ width: "100%", background: "none", border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: "11px 0", color: COLORS.danger, fontWeight: 600, fontSize: 13, cursor: "pointer", marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
             <Trash2 size={14} /> Smazat návyk
           </button>
         )}
+        </div>
+        <div style={{ position: "sticky", bottom: 0, zIndex: 3, padding: "12px 18px calc(12px + env(safe-area-inset-bottom))", background: `linear-gradient(180deg, ${hexA(COLORS.surface, 0.18)}, ${hexA(COLORS.surface, 0.88)})`, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", borderTop: `1px solid ${hexA("#FFFFFF", 0.08)}` }}>
+          <button onClick={handleSave} disabled={saved}
+            style={{ width: "100%", background: COLORS.primary, border: "none", borderRadius: 14, padding: "13px 0", color: COLORS.bg, fontWeight: 700, fontSize: 14, cursor: saved ? "default" : "pointer", boxShadow: `0 0 20px ${hexA(COLORS.primary, 0.4)}`, opacity: saved ? 0.76 : 1, transition: "opacity .18s ease, transform .18s ease" }}>
+            {saved ? "Přidáno" : isEdit ? "Uložit změny" : "Přidat návyk"}
+          </button>
         </div>
       </div>
     </div>
@@ -1432,6 +1462,19 @@ export default function HabitApp() {
       setReady(true);
     })();
   }, []);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const previousOverscroll = document.body.style.overscrollBehavior;
+    if (modal || showShare) {
+      document.body.style.overflow = "hidden";
+      document.body.style.overscrollBehavior = "none";
+    }
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscroll;
+    };
+  }, [modal, showShare]);
 
   const saveSettings = useCallback(async (next) => {
     setSettings(next);
@@ -1513,6 +1556,8 @@ export default function HabitApp() {
         @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
         * { box-sizing: border-box; }
         html, body, #root { min-height: 100%; }
+        html, body { scrollbar-width: none; -ms-overflow-style: none; overscroll-behavior: none; }
+        html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }
         button { font-family: inherit; }
         @keyframes flicker { 0%,100% { transform: scale(1) rotate(-1deg); } 50% { transform: scale(1.035) rotate(1deg); } }
         .fire-flicker { animation: flicker 2.6s ease-in-out infinite; }
@@ -1591,6 +1636,10 @@ export default function HabitApp() {
         }
         .level-progress-fill {
           transition: width .42s cubic-bezier(.2,.9,.25,1);
+        }
+        @media (max-width: 380px) {
+          .share-notification-card { gap: 10px !important; padding: 12px !important; }
+          .share-pill-value { font-size: 15px !important; }
         }
         @keyframes tileActionPopover {
           0% { opacity: 0; transform: translateY(-8px) scale(0.98); }
