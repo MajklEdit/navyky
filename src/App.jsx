@@ -658,7 +658,7 @@ function CalendarScreen({ habits, entries }) {
   const cells = [...Array(startOffset).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
 
   return (
-    <div style={{ padding: "22px 18px 90px", display: "flex", justifyContent: "center" }}>
+    <div style={{ minHeight: "calc(100vh - 78px)", padding: "22px 18px 90px", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ width: "100%", maxWidth: 430 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <button onClick={() => setCursor(new Date(year, month - 1, 1))} style={navBtn}><ChevronLeft size={18} color={COLORS.text} /></button>
