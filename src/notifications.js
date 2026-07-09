@@ -47,11 +47,11 @@ export async function cancelHabitNotifications(habit) {
   await LocalNotifications.cancel({ notifications: ids.map((id) => ({ id })) });
 }
 
-// schedules a notification for a single "check" type habit
+// schedules a notification for a time-based habit
 // (water/sleep are all-day goals, not a single fixed time, so they're skipped here)
 export async function scheduleHabitNotifications(habit) {
   await cancelHabitNotifications(habit);
-  if (habit.type !== "check") return;
+  if (habit.type !== "check" && habit.type !== "checklist") return;
   if (!habit.time || !/^\d{2}:\d{2}$/.test(habit.time)) return;
 
   const [hour, minute] = habit.time.split(":").map(Number);
@@ -64,7 +64,7 @@ export async function scheduleHabitNotifications(habit) {
     await LocalNotifications.schedule({
       notifications: [{
         id: hashId(`${habit.id}-once`),
-        title: "Ohýnek",
+        title: "FireHabits",
         body: `Čas na: ${habit.name}`,
         schedule: { at, allowWhileIdle: true },
       }],
@@ -77,7 +77,7 @@ export async function scheduleHabitNotifications(habit) {
     const weekday = d === null ? null : toCapacitorWeekday(d);
     return {
       id: hashId(`${habit.id}-${d}`),
-      title: "Ohýnek",
+      title: "FireHabits",
       body: `Čas na: ${habit.name}`,
       schedule: {
         at: nextOccurrence(hour, minute, weekday),

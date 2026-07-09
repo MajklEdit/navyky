@@ -1,4 +1,4 @@
-# Ohýnek — Android appka (Capacitor)
+# FireHabits — Android appka (Capacitor)
 
 Tenhle projekt zabalí appku, kterou jsme dělali, do skutečné Android appky
 s reálnými systémovými notifikacemi a daty, co přežijí zavření appky.
