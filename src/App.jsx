@@ -6,6 +6,8 @@ import {
 import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import storage from "./storage";
 import { scheduleAllNotifications } from "./notifications";
+import { sharePng } from "./share";
+import { cloudConfigured, loadCloudData, saveCloudData, signInWithGoogle, signOut, watchUser } from "./cloud";
 
 // ============================================================================
 // DESIGN TOKENS
@@ -343,7 +345,9 @@ function TimeWheelValue({ label, value, max, step = 1, onChange }) {
   const moveDrag = (clientY) => {
     if (!dragStart.current) return;
     const deltaSteps = Math.trunc((dragStart.current.y - clientY) / 14);
-    set(dragStart.current.value + deltaSteps * step);
+    // The value visibly below the selection moves into the center when the
+    // user drags upward, matching native mobile picker behaviour.
+    set(dragStart.current.value - deltaSteps * step);
   };
   useEffect(() => () => {
     if (settleTimer.current) window.clearTimeout(settleTimer.current);
@@ -466,7 +470,6 @@ function DatePickerCard({ value, onChange }) {
 // ============================================================================
 function TodayScreen({ habits, entries, onAdjust, onComplete, onToggleChecklistItem, todayKey, onEdit, onDelete, settings }) {
   const [actionHabit, setActionHabit] = useState(null);
-  const [actionAnchor, setActionAnchor] = useState(null);
   const [justCompleted, setJustCompleted] = useState(null);
   const [completingHabit, setCompletingHabit] = useState(null);
   const [expandedChecklist, setExpandedChecklist] = useState(null);
@@ -500,13 +503,9 @@ function TodayScreen({ habits, entries, onAdjust, onComplete, onToggleChecklistI
     longPressTimer.current = null;
   };
 
-  const openActions = (habit, target) => {
+  const openActions = (habit) => {
     clearLongPress();
     longPressOpened.current = true;
-    if (target) {
-      const rect = target.getBoundingClientRect();
-      setActionAnchor({ top: rect.bottom + 8, left: rect.left, width: rect.width });
-    }
     setActionHabit(habit);
   };
 
@@ -559,12 +558,11 @@ function TodayScreen({ habits, entries, onAdjust, onComplete, onToggleChecklistI
         className={`${completing ? "habit-completing" : ""} ${done && justCompleted === h.id ? "habit-completed-arrival" : ""} ${overdue ? "habit-overdue-pulse" : ""}`}
         onClick={() => handleTileClick(h)}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleTileClick(h); } }}
-        onContextMenu={(e) => { e.preventDefault(); openActions(h, e.currentTarget); }}
+        onContextMenu={(e) => { e.preventDefault(); openActions(h); }}
         onPointerDown={(e) => {
           clearLongPress();
           longPressOpened.current = false;
-          const target = e.currentTarget;
-          longPressTimer.current = window.setTimeout(() => openActions(h, target), 560);
+          longPressTimer.current = window.setTimeout(() => openActions(h), 560);
         }}
         onPointerUp={clearLongPress}
         onPointerCancel={clearLongPress}
@@ -714,13 +712,16 @@ function TodayScreen({ habits, entries, onAdjust, onComplete, onToggleChecklistI
       </div>
 
       {actionHabit && (
-        <div onClick={() => setActionHabit(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.24)", zIndex: 25, padding: 14 }}>
+        <div onClick={() => setActionHabit(null)} style={{
+          position: "fixed", inset: 0, zIndex: 25, padding: 24,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "rgba(5,2,10,0.68)",
+          backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+        }}>
           <div className="tile-action-popover" onClick={(e) => e.stopPropagation()} style={{
-            position: "fixed",
-            top: actionAnchor?.top ?? 80,
-            left: actionAnchor?.left ?? 14,
-            width: actionAnchor?.width ?? "calc(100% - 28px)",
-            ...glassSurface(0.72), borderRadius: 20, padding: 14
+            width: "100%", maxWidth: 390,
+            ...glassSurface(0.82), borderRadius: 20, padding: 14,
+            boxShadow: `0 28px 80px rgba(0,0,0,0.58), 0 0 34px ${hexA(COLORS.primary, 0.14)}`,
           }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text, margin: "2px 4px 12px" }}>{actionHabit.name}</div>
             <button onClick={() => { onEdit(actionHabit); setActionHabit(null); }} style={actionSheetBtn}>
@@ -944,7 +945,7 @@ function StatsScreen({ habits, entries, onShare, settings }) {
   );
 }
 
-function ProfileScreen({ habits, entries, settings, onSaveSettings }) {
+function ProfileScreen({ habits, entries, settings, onSaveSettings, user, authBusy, authError, onGoogleLogin, onLogout }) {
   const perfectStreak = getPerfectStreak(habits, entries, todayDate());
   const xp = getTotalXp(habits, entries, todayDate());
   const level = getLevel(xp);
@@ -960,6 +961,21 @@ function ProfileScreen({ habits, entries, settings, onSaveSettings }) {
   return (
     <div style={{ padding: "22px 18px 90px" }}>
       <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 20, fontWeight: 600, marginBottom: 18 }}>Profil</div>
+
+      <div style={{ ...glassSurface(0.52), borderRadius: 16, padding: 16, marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 10 }}>CLOUDOVÁ SYNCHRONIZACE</div>
+        {user ? <>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{user.displayName || user.email}</div>
+          <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Návyky a statistiky se ukládají do tvého účtu.</div>
+          <button type="button" onClick={onLogout} disabled={authBusy} style={{ ...actionSheetBtn, justifyContent: "center", marginTop: 12 }}>Odhlásit</button>
+        </> : <>
+          <button type="button" onClick={onGoogleLogin} disabled={authBusy || !cloudConfigured} style={{ ...actionSheetBtn, justifyContent: "center", marginTop: 0, opacity: authBusy || !cloudConfigured ? 0.6 : 1 }}>
+            <Fingerprint size={18} /> {authBusy ? "Přihlašuji…" : "Přihlásit přes Google"}
+          </button>
+          {!cloudConfigured && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>Cloud čeká na připojení Firebase projektu.</div>}
+        </>}
+        {authError && <div style={{ fontSize: 11, color: COLORS.danger, marginTop: 8 }}>{authError}</div>}
+      </div>
 
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", ...glassSurface(0.54), borderRadius: 20, padding: "24px 16px", marginBottom: 20 }}>
         <Flame score={score} size={110} />
@@ -1136,7 +1152,7 @@ function ShareCard({ onClose, score, streak, level, xp, settings }) {
 
     fitText(headline, textX, 105, width - textX - 54, "800 38px Unbounded, sans-serif", COLORS.text);
 
-    const pills = [["LEVEL", `LVL ${level.number}`], ["STREAK", `${streak}`], ["XP", `${xp}`]];
+    const pills = [["LEVEL", `${level.number}`], ["STREAK", `${streak}`], ["XP", `${xp}`]];
     const pillGap = 12;
     const pillW = (width - textX - 34 - pillGap * 2) / 3;
     pills.forEach(([label, value], index) => {
@@ -1149,7 +1165,7 @@ function ShareCard({ onClose, score, streak, level, xp, settings }) {
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.font = "600 14px 'IBM Plex Mono', monospace";
-      ctx.fillStyle = COLORS.textMuted;
+      ctx.fillStyle = COLORS.text;
       ctx.fillText(label, x + 16, y + 23);
       ctx.font = "800 38px Unbounded, sans-serif";
       ctx.fillStyle = COLORS.primary;
@@ -1159,19 +1175,7 @@ function ShareCard({ onClose, score, streak, level, xp, settings }) {
     const fileName = `fireup-share-${fmt(todayDate())}.png`;
     const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
     if (!blob) return;
-    const file = new File([blob], fileName, { type: "image/png" });
-    if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: "FireUp" });
-      return;
-    }
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.download = fileName;
-    link.href = url;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1200);
+    await sharePng(blob, fileName);
   };
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 30, padding: 24, overflow: "hidden", overscrollBehavior: "contain" }}>
@@ -1191,7 +1195,7 @@ function ShareCard({ onClose, score, streak, level, xp, settings }) {
           </div>
           <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 18, fontWeight: 800, color: COLORS.text, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{headline}</div>
           <div style={{ display: "flex", gap: 6, marginTop: 9, flexWrap: "nowrap", minWidth: 0 }}>
-            <SharePill label="LEVEL" value={`LVL ${level.number}`} />
+            <SharePill label="LEVEL" value={`${level.number}`} />
             <SharePill label="STREAK" value={`${streak}`} />
             <SharePill label="XP" value={`${xp}`} />
           </div>
@@ -1208,7 +1212,7 @@ function ShareCard({ onClose, score, streak, level, xp, settings }) {
 function SharePill({ label, value }) {
   return (
     <div style={{ ...glassSurface(0.42), borderRadius: 10, padding: "5px 6px 6px", minWidth: 0, flex: "1 1 0" }}>
-      <div style={{ fontSize: 8, color: COLORS.textMuted, letterSpacing: 0.7, whiteSpace: "nowrap" }}>{label}</div>
+      <div style={{ fontSize: 8, color: COLORS.text, letterSpacing: 0.7, whiteSpace: "nowrap" }}>{label}</div>
       <div className="share-pill-value" style={{ fontFamily: "'Unbounded', sans-serif", fontSize: "clamp(14px, 4.7vw, 19px)", fontWeight: 800, color: COLORS.primary, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1 }}>{value}</div>
     </div>
   );
@@ -1441,6 +1445,10 @@ export default function HabitApp() {
   const [levelUp, setLevelUp] = useState(null);
   const [ready, setReady] = useState(false);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [user, setUser] = useState(null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [cloudReady, setCloudReady] = useState(false);
   const todayKey = fmt(todayDate());
   COLORS.primary = settings.accent || DEFAULT_SETTINGS.accent; // app-wide accent, chosen in Profil
   COLORS.bg = settings.background || DEFAULT_SETTINGS.background; // app background, chosen in Profil
@@ -1461,6 +1469,67 @@ export default function HabitApp() {
       try { await storage.set("lastLevel", JSON.stringify(lvl.name), false); } catch {}
       setReady(true);
     })();
+  }, []);
+
+  useEffect(() => watchUser(nextUser => {
+    setUser(nextUser);
+    setCloudReady(false);
+  }), []);
+
+  useEffect(() => {
+    if (!ready || !user || cloudReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const cloud = await loadCloudData(user.uid);
+        if (cancelled) return;
+        if (cloud) {
+          const nextHabits = Array.isArray(cloud.habits) ? cloud.habits : habits;
+          const nextEntries = cloud.entries || entries;
+          const nextSettings = { ...settings, ...(cloud.settings || {}) };
+          setHabits(nextHabits); setEntries(nextEntries); setSettings(nextSettings);
+          await Promise.all([
+            storage.set("habits", JSON.stringify(nextHabits)),
+            storage.set("entries", JSON.stringify(nextEntries)),
+            storage.set("settings", JSON.stringify(nextSettings)),
+          ]);
+        } else {
+          await saveCloudData(user.uid, { habits, entries, settings });
+        }
+        if (!cancelled) setCloudReady(true);
+      } catch (error) {
+        if (!cancelled) setAuthError(error.message || "Synchronizace se nepovedla.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ready, user, cloudReady]);
+
+  useEffect(() => {
+    if (!ready || !user || !cloudReady) return;
+    const timer = window.setTimeout(() => {
+      saveCloudData(user.uid, { habits, entries, settings }).catch(error => setAuthError(error.message));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [ready, user, cloudReady, habits, entries, settings]);
+
+  const handleGoogleLogin = useCallback(async () => {
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      setAuthError(error.message || "Přihlášení se nepovedlo.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    setAuthBusy(true);
+    setAuthError("");
+    try { await signOut(); }
+    catch (error) { setAuthError(error.message || "Odhlášení se nepovedlo."); }
+    finally { setAuthBusy(false); }
   }, []);
 
   useEffect(() => {
@@ -1761,7 +1830,7 @@ export default function HabitApp() {
         {ready && tab === "today" && <TodayScreen habits={habits} entries={entries} onAdjust={onAdjust} onComplete={onComplete} onToggleChecklistItem={onToggleChecklistItem} todayKey={todayKey} onEdit={(h) => setModal(h)} onDelete={deleteHabit} settings={settings} />}
         {ready && tab === "calendar" && <CalendarScreen habits={habits} entries={entries} />}
         {ready && tab === "stats" && <StatsScreen habits={habits} entries={entries} onShare={() => setShowShare(true)} settings={settings} />}
-        {ready && tab === "profile" && <ProfileScreen habits={habits} entries={entries} settings={settings} onSaveSettings={saveSettings} />}
+        {ready && tab === "profile" && <ProfileScreen habits={habits} entries={entries} settings={settings} onSaveSettings={saveSettings} user={user} authBusy={authBusy} authError={authError} onGoogleLogin={handleGoogleLogin} onLogout={handleLogout} />}
       </div>
 
       {modal && <HabitModal habit={modal === "add" ? null : modal} onClose={() => setModal(null)} onSave={saveHabit} onDelete={deleteHabit} />}

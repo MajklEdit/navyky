@@ -2,3 +2,7 @@ node_modules/
 dist/
 android/
 .DS_Store
+.env
+.env.local
+vite.out.log
+vite.err.log
