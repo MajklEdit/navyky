@@ -1481,8 +1481,7 @@ function AuthScreen({ busy, error, onEmailLogin, onRegister, onGoogleLogin }) {
       <style>{`.auth-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }`}</style>
       <div style={{ width: "100%", maxWidth: 420, minWidth: 0, boxSizing: "border-box", ...glassSurface(0.72), borderRadius: 28, padding: "clamp(20px, 6vw, 28px) clamp(16px, 5vw, 22px)", boxShadow: `0 30px 90px rgba(0,0,0,.55), 0 0 42px ${hexA(COLORS.primary, 0.16)}` }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 24 }}>
-          <img src="/flame.png" alt="FireUp" style={{ width: 96, height: 96, objectFit: "contain", filter: `drop-shadow(0 16px 42px ${hexA(COLORS.primary, .28)})` }} />
-          <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 28, fontWeight: 800, marginTop: 8, color: "#FFFFFF" }}>FireUp</div>
+          <img src="/logo.png" alt="FireUp" style={{ width: 140, height: 140, objectFit: "contain", filter: `drop-shadow(0 16px 42px ${hexA(COLORS.primary, .28)})` }} />
         </div>
         <form onSubmit={submit}>
           {registering && <input value={name} onChange={e => setName(e.target.value)} placeholder="Tvoje jméno" autoComplete="name" style={authInputStyle} />}
