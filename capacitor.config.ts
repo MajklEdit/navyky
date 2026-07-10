@@ -4,7 +4,12 @@ const config: CapacitorConfig = {
   appId: 'com.fireup.app',
   appName: 'FireUp',
   webDir: 'dist',
-  bundledWebRuntime: false,
+  plugins: {
+    FirebaseAuthentication: {
+      skipNativeAuth: true,
+      providers: ['google.com'],
+    },
+  },
 };
 
 export default config;

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="flameOuter" x1="246" y1="145" x2="765" y2="845" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFE7A8"/>
+      <stop offset="34%" stop-color="#FF8A1F"/>
+      <stop offset="68%" stop-color="#FF3D81"/>
+      <stop offset="100%" stop-color="#C13BFF"/>
+    </linearGradient>
+    <linearGradient id="flameInner" x1="390" y1="275" x2="650" y2="795" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="34%" stop-color="#FFD166"/>
+      <stop offset="72%" stop-color="#FF6A3D"/>
+      <stop offset="100%" stop-color="#FF3D81"/>
+    </linearGradient>
+    <linearGradient id="arrowG" x1="512" y1="260" x2="512" y2="620" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#DDFBFF"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="24" stdDeviation="34" flood-color="#000000" flood-opacity="0.45"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="34" flood-color="#FF4FD8" flood-opacity="0.38"/>
+    </filter>
+  </defs>
+  <path d="M182 776C266 884 381 936 512 936C700 936 842 814 842 636C842 524 785 432 716 362C726 426 704 478 660 506C666 381 622 260 512 108C402 260 358 381 364 506C320 478 298 426 308 362C239 432 182 524 182 636C182 689 191 736 214 776Z" fill="url(#flameOuter)" filter="url(#shadow)"/>
+  <path d="M365 761C403 825 456 858 512 858C602 858 672 794 672 704C672 640 636 588 596 552C602 622 571 659 528 678C544 564 517 455 452 352C444 470 400 547 354 602C315 648 306 710 365 761Z" fill="url(#flameInner)" opacity="0.96"/>
+  <path d="M512 242L652 394H573V612H451V394H372L512 242Z" fill="url(#arrowG)" opacity="0.94"/>
+  <path d="M512 242L652 394H573V612H451V394H372L512 242Z" fill="none" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="10" stroke-linejoin="round"/>
+</svg>
