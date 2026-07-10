@@ -1,7 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { FirebaseAuthentication } from "@capacitor-firebase/authentication";
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signInWithPopup, signOut as firebaseSignOut } from "firebase/auth";
+import { createUserWithEmailAndPassword, getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signInWithEmailAndPassword, signInWithPopup, signOut as firebaseSignOut, updateProfile } from "firebase/auth";
 import { doc, getDoc, getFirestore, serverTimestamp, setDoc } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -31,6 +31,17 @@ export async function signInWithGoogle() {
   }
   return (await signInWithPopup(auth, new GoogleAuthProvider())).user;
 }
+export async function signInWithEmail(email, password) {
+  if (!auth) throw new Error("Firebase není nakonfigurovaný.");
+  return (await signInWithEmailAndPassword(auth, email.trim(), password)).user;
+}
+export async function registerWithEmail(name, email, password) {
+  if (!auth) throw new Error("Firebase není nakonfigurovaný.");
+  const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  const displayName = name.trim() || email.split("@")[0];
+  await updateProfile(credential.user, { displayName });
+  return credential.user;
+}
 export async function signOut() {
   if (!auth) return;
   if (Capacitor.isNativePlatform()) await FirebaseAuthentication.signOut();
@@ -42,5 +53,5 @@ export async function loadCloudData(uid) {
   return snapshot.exists() ? snapshot.data() : null;
 }
 export async function saveCloudData(uid, data) {
-  if (db && uid) await setDoc(doc(db, "users", uid), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+  if (db && uid) await setDoc(doc(db, "users", uid), { ...data, ownerUid: uid, updatedAt: serverTimestamp() }, { merge: true });
 }

@@ -3,11 +3,11 @@ import {
   Flame as FlameIcon, Check, ChevronLeft, ChevronRight,
   Plus, X, CalendarDays, BarChart3, Home, Trash2, Pencil, Minus, Share2, Sparkles, User, Fingerprint, ChevronDown, Trophy, Zap, Medal, Target,
 } from "lucide-react";
-import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
+import { Area, AreaChart, BarChart, Bar, Line, LineChart, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import storage from "./storage";
 import { scheduleAllNotifications } from "./notifications";
 import { sharePng } from "./share";
-import { cloudConfigured, loadCloudData, saveCloudData, signInWithGoogle, signOut, watchUser } from "./cloud";
+import { cloudConfigured, loadCloudData, registerWithEmail, saveCloudData, signInWithEmail, signInWithGoogle, signOut, watchUser } from "./cloud";
 
 // ============================================================================
 // DESIGN TOKENS
@@ -828,15 +828,24 @@ function GameStat({ icon: Icon, label, value, color }) {
 }
 
 function StatsScreen({ habits, entries, onShare, settings }) {
-  const last14 = useMemo(() => {
+  const [chartType, setChartType] = useState("bar");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [habitFilter, setHabitFilter] = useState("all");
+  const chartData = useMemo(() => {
     const arr = [];
-    for (let i = 13; i >= 0; i--) {
+    for (let i = 29; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
-      const s = dayScore(habits, entries, d);
-      arr.push({ label: d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" }), vitalita: s == null ? 0 : Math.round(s * 100) });
+      const key = fmt(d);
+      let selected = habits.filter(h => isScheduled(h, d));
+      if (habitFilter !== "all") selected = selected.filter(h => h.id === habitFilter);
+      else if (categoryFilter !== "all") selected = selected.filter(h => h.cat === categoryFilter);
+      const value = selected.length ? Math.round(selected.filter(h => isDone(h, entries[key]?.[h.id])).length / selected.length * 100) : 0;
+      arr.push({ label: d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" }), value });
     }
     return arr;
-  }, [habits, entries]);
+  }, [habits, entries, categoryFilter, habitFilter]);
+  const selectableHabits = categoryFilter === "all" ? habits : habits.filter(h => h.cat === categoryFilter);
+  const average = chartData.length ? Math.round(chartData.reduce((sum, item) => sum + item.value, 0) / chartData.length) : 0;
   const perfectStreak = getPerfectStreak(habits, entries, todayDate());
   const xp = getTotalXp(habits, entries, todayDate());
   const level = getLevel(xp);
@@ -931,14 +940,31 @@ function StatsScreen({ habits, entries, onShare, settings }) {
       </div>
 
       <div style={{ fontSize: 12, letterSpacing: 1, color: COLORS.textMuted, marginBottom: 10, fontFamily: "'IBM Plex Mono', monospace" }}>VITALITA · POSLEDNÍCH 14 DNÍ</div>
-      <div style={{ ...glassSurface(0.54), borderRadius: 16, padding: "14px 8px 4px", height: 170 }}>
+      <div style={{ ...glassSurface(0.54), borderRadius: 16, padding: 14, marginBottom: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <select value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setHabitFilter("all"); }} style={{ ...inputStyle, marginBottom: 0 }}>
+            <option value="all">Všechny kategorie</option>
+            {Object.entries(CATS).map(([id, category]) => <option key={id} value={id}>{category.label}</option>)}
+          </select>
+          <select value={habitFilter} onChange={e => setHabitFilter(e.target.value)} style={{ ...inputStyle, marginBottom: 0 }}>
+            <option value="all">Všechny položky</option>
+            {selectableHabits.map(habit => <option key={habit.id} value={habit.id}>{habit.name}</option>)}
+          </select>
+        </div>
+        <div style={{ display: "flex", gap: 7, marginTop: 10 }}>
+          {[['bar', 'Sloupce'], ['line', 'Křivka'], ['area', 'Plocha']].map(([id, label]) => <button key={id} onClick={() => setChartType(id)} style={{ flex: 1, borderRadius: 10, padding: "8px 4px", border: `1px solid ${chartType === id ? COLORS.primary : COLORS.border}`, background: chartType === id ? hexA(COLORS.primary, .17) : "transparent", color: COLORS.text, cursor: "pointer", fontSize: 11 }}>{label}</button>)}
+        </div>
+        <div style={{ marginTop: 12, fontSize: 12, color: COLORS.textMuted }}>Průměrná úspěšnost za 30 dní <strong style={{ color: COLORS.primary }}>{average}%</strong></div>
+      </div>
+      <div style={{ ...glassSurface(0.54), borderRadius: 16, padding: "14px 8px 4px", height: 220 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={last14} margin={{ top: 0, right: 4, left: -22, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke={COLORS.border} />
-            <XAxis dataKey="label" tick={{ fill: COLORS.textMuted, fontSize: 9 }} axisLine={{ stroke: COLORS.border }} tickLine={false} interval={1} />
-            <Tooltip contentStyle={{ background: COLORS.surface2, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 12 }} labelStyle={{ color: COLORS.text }} cursor={{ fill: COLORS.surface2 }} formatter={(v) => [`${v}%`, "vitalita"]} />
-            <Bar dataKey="vitalita" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
-          </BarChart>
+          {chartType === "line" ? <LineChart data={chartData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+            <CartesianGrid vertical={false} stroke={COLORS.border} /><XAxis dataKey="label" tick={{ fill: COLORS.textMuted, fontSize: 9 }} interval={4} /><YAxis domain={[0, 100]} tick={{ fill: COLORS.textMuted, fontSize: 9 }} /><Tooltip formatter={v => [`${v}%`, "úspěšnost"]} contentStyle={{ background: COLORS.surface2, border: `1px solid ${COLORS.border}` }} /><Line type="monotone" dataKey="value" stroke={COLORS.primary} strokeWidth={3} dot={false} />
+          </LineChart> : chartType === "area" ? <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+            <CartesianGrid vertical={false} stroke={COLORS.border} /><XAxis dataKey="label" tick={{ fill: COLORS.textMuted, fontSize: 9 }} interval={4} /><YAxis domain={[0, 100]} tick={{ fill: COLORS.textMuted, fontSize: 9 }} /><Tooltip formatter={v => [`${v}%`, "úspěšnost"]} contentStyle={{ background: COLORS.surface2, border: `1px solid ${COLORS.border}` }} /><Area type="monotone" dataKey="value" stroke={COLORS.secondary} fill={hexA(COLORS.secondary, .22)} strokeWidth={2} />
+          </AreaChart> : <BarChart data={chartData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+            <CartesianGrid vertical={false} stroke={COLORS.border} /><XAxis dataKey="label" tick={{ fill: COLORS.textMuted, fontSize: 9 }} interval={4} /><YAxis domain={[0, 100]} tick={{ fill: COLORS.textMuted, fontSize: 9 }} /><Tooltip formatter={v => [`${v}%`, "úspěšnost"]} contentStyle={{ background: COLORS.surface2, border: `1px solid ${COLORS.border}` }} /><Bar dataKey="value" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
+          </BarChart>}
         </ResponsiveContainer>
       </div>
     </div>
@@ -952,6 +978,8 @@ function ProfileScreen({ habits, entries, settings, onSaveSettings, user, authBu
   const score = dayScore(habits, entries, todayDate()) ?? 0;
   const playerName = settings.name?.trim() || "Ty";
   const [nameInput, setNameInput] = useState(settings.name || "");
+  const [themesOpen, setThemesOpen] = useState(false);
+  useEffect(() => setNameInput(settings.name || user?.displayName || ""), [settings.name, user?.displayName]);
 
   const commitName = () => {
     if (nameInput.trim() !== (settings.name || "")) onSaveSettings({ ...settings, name: nameInput.trim() });
@@ -1018,7 +1046,10 @@ function ProfileScreen({ habits, entries, settings, onSaveSettings, user, authBu
 
       <div style={{ ...glassSurface(0.52), borderRadius: 16, padding: 16, marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 10 }}>BAREVNÝ MOTIV</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+        <button type="button" onClick={() => setThemesOpen(value => !value)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, border: "none", background: "none", color: COLORS.textMuted, padding: "0 0 8px", cursor: "pointer", fontSize: 11 }}>
+          {themesOpen ? "Skrýt" : "Rozbalit"} <ChevronDown size={17} style={{ transform: themesOpen ? "rotate(180deg)" : "none", transition: "transform .2s ease" }} />
+        </button>
+        <div style={{ display: themesOpen ? "grid" : "none", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
           {THEME_VARIANTS.map(theme => {
             const active = activeTheme === theme.id;
             return (
@@ -1048,7 +1079,7 @@ function ProfileScreen({ habits, entries, settings, onSaveSettings, user, authBu
         </div>
       </div>
 
-      <div style={{ ...glassSurface(0.52), borderRadius: 16, padding: 16, marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      {false && <><div style={{ ...glassSurface(0.52), borderRadius: 16, padding: 16, marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 4 }}>BARVA APLIKACE</div>
           <div style={{ fontSize: 12, fontFamily: "'IBM Plex Mono', monospace", color: COLORS.textMuted }}>{(settings.accent || DEFAULT_SETTINGS.accent).toUpperCase()}</div>
@@ -1072,7 +1103,7 @@ function ProfileScreen({ habits, entries, settings, onSaveSettings, user, authBu
           onChange={e => onSaveSettings({ ...settings, theme: "custom", background: e.target.value })}
           style={{ width: 48, height: 48, borderRadius: 12, border: `1px solid ${COLORS.border}`, background: "none", padding: 0, cursor: "pointer" }}
         />
-      </div>
+      </div></>}
     </div>
   );
 }
@@ -1434,6 +1465,44 @@ function LevelUpBanner({ level, onClose, settings }) {
 // ============================================================================
 // ROOT
 // ============================================================================
+function AuthScreen({ busy, error, onEmailLogin, onRegister, onGoogleLogin }) {
+  const [registering, setRegistering] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const submit = (event) => {
+    event.preventDefault();
+    if (registering) onRegister(name, email, password);
+    else onEmailLogin(email, password);
+  };
+  const authInputStyle = { ...inputStyle, boxSizing: "border-box", minWidth: 0, maxWidth: "100%", display: "block" };
+  return (
+    <div className="auth-scroll" style={{ position: "fixed", inset: 0, width: "100%", minHeight: "100dvh", overflowY: "auto", scrollbarWidth: "none", msOverflowStyle: "none", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", padding: "max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom))", background: `radial-gradient(circle at 50% 12%, ${hexA(COLORS.primary, 0.24)}, transparent 42%), ${COLORS.bg}`, color: COLORS.text, fontFamily: "'Manrope', sans-serif" }}>
+      <style>{`.auth-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }`}</style>
+      <div style={{ width: "100%", maxWidth: 420, minWidth: 0, boxSizing: "border-box", ...glassSurface(0.72), borderRadius: 28, padding: "clamp(20px, 6vw, 28px) clamp(16px, 5vw, 22px)", boxShadow: `0 30px 90px rgba(0,0,0,.55), 0 0 42px ${hexA(COLORS.primary, 0.16)}` }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 24 }}>
+          <img src="/flame.png" alt="FireUp" style={{ width: 96, height: 96, objectFit: "contain", filter: `drop-shadow(0 16px 42px ${hexA(COLORS.primary, .28)})` }} />
+          <div style={{ fontFamily: "'Unbounded', sans-serif", fontSize: 28, fontWeight: 800, marginTop: 8, color: "#FFFFFF" }}>FireUp</div>
+        </div>
+        <form onSubmit={submit}>
+          {registering && <input value={name} onChange={e => setName(e.target.value)} placeholder="Tvoje jméno" autoComplete="name" style={authInputStyle} />}
+          <input value={email} onChange={e => setEmail(e.target.value)} placeholder="E-mail" type="email" autoComplete="email" required style={authInputStyle} />
+          <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Heslo" type="password" autoComplete={registering ? "new-password" : "current-password"} minLength={6} required style={authInputStyle} />
+          <button type="submit" disabled={busy || !cloudConfigured} style={{ width: "100%", border: "none", borderRadius: 14, padding: 14, background: COLORS.primary, color: COLORS.bg, fontWeight: 800, cursor: "pointer", opacity: busy ? .65 : 1 }}>
+            {busy ? "Pracuji…" : registering ? "Vytvořit účet" : "Přihlásit se"}
+          </button>
+        </form>
+        <button type="button" onClick={() => setRegistering(value => !value)} disabled={busy} style={{ width: "100%", border: "none", background: "none", color: COLORS.secondary, padding: "14px 0", cursor: "pointer", fontSize: 13 }}>
+          {registering ? "Už máš účet? Přihlásit se" : "Nemáš účet? Zaregistrovat se"}
+        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, color: COLORS.textMuted, fontSize: 11, margin: "2px 0 14px" }}><span style={{ height: 1, flex: 1, background: COLORS.border }} />NEBO<span style={{ height: 1, flex: 1, background: COLORS.border }} /></div>
+        <button type="button" onClick={onGoogleLogin} disabled={busy || !cloudConfigured} style={{ ...actionSheetBtn, justifyContent: "center", marginTop: 0 }}><Fingerprint size={18} /> Přihlásit přes Google</button>
+        {error && <div style={{ marginTop: 14, color: COLORS.danger, fontSize: 12, lineHeight: 1.4, textAlign: "center" }}>{error}</div>}
+      </div>
+    </div>
+  );
+}
+
 const DEFAULT_SETTINGS = { name: "", theme: "neon", accent: "#C13BFF", background: "#0E0A16" };
 
 export default function HabitApp() {
@@ -1449,6 +1518,7 @@ export default function HabitApp() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
   const [cloudReady, setCloudReady] = useState(false);
+  const [authResolved, setAuthResolved] = useState(false);
   const todayKey = fmt(todayDate());
   COLORS.primary = settings.accent || DEFAULT_SETTINGS.accent; // app-wide accent, chosen in Profil
   COLORS.bg = settings.background || DEFAULT_SETTINGS.background; // app background, chosen in Profil
@@ -1474,6 +1544,7 @@ export default function HabitApp() {
   useEffect(() => watchUser(nextUser => {
     setUser(nextUser);
     setCloudReady(false);
+    setAuthResolved(true);
   }), []);
 
   useEffect(() => {
@@ -1483,10 +1554,12 @@ export default function HabitApp() {
       try {
         const cloud = await loadCloudData(user.uid);
         if (cancelled) return;
-        if (cloud) {
+        const legacyPasswordAccount = cloud && !cloud.ownerUid && user.providerData?.some(provider => provider.providerId === "password");
+        if (cloud && !legacyPasswordAccount) {
           const nextHabits = Array.isArray(cloud.habits) ? cloud.habits : habits;
           const nextEntries = cloud.entries || entries;
-          const nextSettings = { ...settings, ...(cloud.settings || {}) };
+          const cloudSettings = cloud.settings || {};
+          const nextSettings = { ...settings, ...cloudSettings, name: cloudSettings.name?.trim() || settings.name?.trim() || user.displayName || "" };
           setHabits(nextHabits); setEntries(nextEntries); setSettings(nextSettings);
           await Promise.all([
             storage.set("habits", JSON.stringify(nextHabits)),
@@ -1494,7 +1567,16 @@ export default function HabitApp() {
             storage.set("settings", JSON.stringify(nextSettings)),
           ]);
         } else {
-          await saveCloudData(user.uid, { habits, entries, settings });
+          const freshSettings = { ...DEFAULT_SETTINGS, name: user.displayName || user.email?.split("@")[0] || "" };
+          const freshHabits = DEFAULT_HABITS;
+          const freshEntries = {};
+          setHabits(freshHabits); setEntries(freshEntries); setSettings(freshSettings);
+          await Promise.all([
+            storage.set("habits", JSON.stringify(freshHabits)),
+            storage.set("entries", JSON.stringify(freshEntries)),
+            storage.set("settings", JSON.stringify(freshSettings)),
+            saveCloudData(user.uid, { habits: freshHabits, entries: freshEntries, settings: freshSettings }),
+          ]);
         }
         if (!cancelled) setCloudReady(true);
       } catch (error) {
@@ -1523,6 +1605,26 @@ export default function HabitApp() {
       setAuthBusy(false);
     }
   }, []);
+
+  const handleEmailLogin = useCallback(async (email, password) => {
+    setAuthBusy(true); setAuthError("");
+    try { await signInWithEmail(email, password); }
+    catch (error) { setAuthError(error.message || "Přihlášení se nepovedlo."); }
+    finally { setAuthBusy(false); }
+  }, []);
+
+  const handleRegister = useCallback(async (name, email, password) => {
+    setAuthBusy(true); setAuthError("");
+    try {
+      const nextUser = await registerWithEmail(name, email, password);
+      if (!settings.name?.trim()) {
+        const nextSettings = { ...settings, name: nextUser.displayName || name.trim() };
+        setSettings(nextSettings);
+        await storage.set("settings", JSON.stringify(nextSettings));
+      }
+    } catch (error) { setAuthError(error.message || "Registrace se nepovedla."); }
+    finally { setAuthBusy(false); }
+  }, [settings]);
 
   const handleLogout = useCallback(async () => {
     setAuthBusy(true);
@@ -1609,6 +1711,9 @@ export default function HabitApp() {
   const perfectStreak = getPerfectStreak(habits, entries, todayDate());
   const xp = getTotalXp(habits, entries, todayDate());
   const level = getLevel(xp);
+
+  if (!ready || !authResolved || (user && !cloudReady)) return <div style={{ minHeight: "100vh", background: COLORS.bg }} />;
+  if (!user) return <AuthScreen busy={authBusy} error={authError} onEmailLogin={handleEmailLogin} onRegister={handleRegister} onGoogleLogin={handleGoogleLogin} />;
 
   return (
     <div style={{
